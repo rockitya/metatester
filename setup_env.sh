@@ -9,38 +9,35 @@ SDE_URL="https://archive.org/download/sde-external-tar/sde-external-tar.xz"
 APP_URL="https://archive.org/download/metatester64/metatester64.exe"
 
 echo "=================================================="
-echo "☢️ 1. CLEARING LOCKS & OLD SOCKETS"
+echo "☢️ 1. NUCLEAR CLEANUP"
 echo "=================================================="
 killall -9 xvfb x11vnc websockify wine wine64 sde64 2>/dev/null || true
 rm -rf /tmp/.X11-unix/X* /tmp/.X*-lock
 rm -rf .wine
 
 echo "=================================================="
-echo "☢️ 2. INSTALLING ALL WINE64 DEPENDENCIES"
+echo "☢️ 2. INSTALLING FULL WINE64 STACK"
 echo "=================================================="
 apt-get update
-# Installing the full wine64 suite + development tools ensures all shared libraries (.so files) are present
-DEBIAN_FRONTEND=noninteractive apt-get install -y \
+# Using the standard wine64 package + binfmt ensures the environment is complete
+DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     wget curl tar xz-utils xvfb x11vnc websockify \
-    wine64 libwine wine-preloader binfmt-support
+    wine64 libwine binfmt-support
 
 echo "=================================================="
 echo "3. SETTING UP ASSETS"
 echo "=================================================="
-# noVNC setup
 if [ ! -d "noVNC" ]; then
     wget -qO- https://github.com/novnc/noVNC/archive/v1.4.0.tar.gz | tar xz
     mv noVNC-1.4.0 noVNC
     ln -sf vnc.html noVNC/index.html
 fi
 
-# Intel SDE
 [ ! -f "sde-external.tar.xz" ] && wget -q --show-progress -O "sde-external.tar.xz" "$SDE_URL"
 if [ ! -d "sde_folder" ]; then
     mkdir -p sde_folder && tar -xf "sde-external.tar.xz" -C sde_folder --strip-components=1
 fi
 
-# MetaTester64
 [ ! -f "metatester64.exe" ] && wget -q --show-progress -O "metatester64.exe" "$APP_URL"
 
 echo "=================================================="
@@ -70,7 +67,7 @@ export DISPLAY=:1
 wine64 wineboot -u
 sleep 5
 
-# Launch using the SDE emulator in a Virtual Desktop for maximum compatibility
+# Launch using Virtual Desktop
 nohup ./sde_folder/sde64 -hsw -- wine64 explorer /desktop=MetaTester,1024x768 metatester64.exe > debug.log 2>&1 &
 
-echo "Process started. Check your browser in 30-60 seconds."
+echo "Process started. If the browser shows a black/blue screen, wait 60s for the app to load."
