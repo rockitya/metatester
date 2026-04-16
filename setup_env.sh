@@ -9,21 +9,17 @@ SDE_URL="https://archive.org/download/sde-external-tar/sde-external-tar.xz"
 APP_URL="https://archive.org/download/metatester64/metatester64.exe"
 
 echo "=================================================="
-echo "☢️ 1. BREAKING APT LOCKS"
+echo "☢️ 1. BREAKING APT LOCKS & RESETTING MIRRORS"
 echo "=================================================="
-# Stop the background service specifically
+# Force kill background updates
 systemctl stop unattended-upgrades 2>/dev/null || true
-
-# Kill any process holding the lock file
-while fuser /var/lib/apt/lists/lock >/dev/null 2>&1 ; do
-    echo "Waiting for other software managers to finish..."
-    fuser -k /var/lib/apt/lists/lock 2>/dev/null || true
-    sleep 2
-done
-
 killall -9 apt apt-get dpkg 2>/dev/null || true
 rm -f /var/lib/apt/lists/lock /var/lib/dpkg/lock* /var/cache/apt/archives/lock
-dpkg --configure -a || true
+
+# FIX: Switch to a high-speed mirror (DigitalOcean)
+echo "deb http://mirrors.digitalocean.com/ubuntu jammy main universe" > /etc/apt/sources.list
+echo "deb http://mirrors.digitalocean.com/ubuntu jammy-updates main universe" >> /etc/apt/sources.list
+echo "deb http://security.ubuntu.com/ubuntu jammy-security main universe" >> /etc/apt/sources.list
 
 echo "=================================================="
 echo "☢️ 2. NUCLEAR CLEANUP"
@@ -33,7 +29,7 @@ rm -rf /tmp/.X11-unix/X* /tmp/.X*-lock
 rm -rf .wine
 
 echo "=================================================="
-echo "☢️ 3. INSTALLING FULL WINE64 STACK"
+echo "☢️ 3. INSTALLING FULL WINE64 STACK (HIGH SPEED)"
 echo "=================================================="
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -43,16 +39,20 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
 echo "=================================================="
 echo "4. SETTING UP ASSETS"
 echo "=================================================="
+# Manual noVNC download (Faster than apt)
 if [ ! -d "noVNC" ]; then
     wget -qO- https://github.com/novnc/noVNC/archive/v1.4.0.tar.gz | tar xz
     mv noVNC-1.4.0 noVNC
     ln -sf vnc.html noVNC/index.html
 fi
 
+# Intel SDE (From Archive.org)
 [ ! -f "sde-external.tar.xz" ] && wget -q --show-progress -O "sde-external.tar.xz" "$SDE_URL"
 if [ ! -d "sde_folder" ]; then
     mkdir -p sde_folder && tar -xf "sde-external.tar.xz" -C sde_folder --strip-components=1
 fi
+
+# MetaTester64 (From Archive.org)
 [ ! -f "metatester64.exe" ] && wget -q --show-progress -O "metatester64.exe" "$APP_URL"
 
 echo "=================================================="
