@@ -14,27 +14,29 @@ killall -9 apt apt-get dpkg 2>/dev/null || true
 rm -f /var/lib/apt/lists/lock /var/lib/dpkg/lock* /var/cache/apt/archives/lock
 
 echo "=================================================="
-echo "2. Ultra-Minimal Dependencies"
+echo "2. Installing Core Dependencies"
 echo "=================================================="
 apt-get update
-# We only install the bare essentials: Xvfb, VNC, and core Wine
+# Added 'wine' specifically to ensure binaries are in PATH
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    wget curl tar xz-utils xvfb x11vnc wine64 libwine websockify
+    wget curl tar xz-utils xvfb x11vnc wine wine64 libwine websockify
 
 echo "=================================================="
-echo "3. Manual noVNC Setup (Bypasses 100+ packages)"
+echo "3. Manual noVNC Setup"
 echo "=================================================="
 if [ ! -d "noVNC" ]; then
     wget -qO- https://github.com/novnc/noVNC/archive/v1.4.0.tar.gz | tar xz
     mv noVNC-1.4.0 noVNC
-    ln -s noVNC/vnc.html noVNC/index.html
+    ln -s vnc.html noVNC/index.html
 fi
 
 echo "=================================================="
 echo "4. Downloading SDE & MetaTester"
 echo "=================================================="
 [ ! -f "sde-external.tar.xz" ] && wget -q --show-progress -O "sde-external.tar.xz" "$SDE_URL"
-mkdir -p sde_folder && tar -xf "sde-external.tar.xz" -C sde_folder --strip-components=1
+if [ ! -d "sde_folder" ]; then
+    mkdir -p sde_folder && tar -xf "sde-external.tar.xz" -C sde_folder --strip-components=1
+fi
 SDE_BIN="$(pwd)/sde_folder/sde64"
 
 [ ! -f "metatester64.exe" ] && wget -q --show-progress -O "metatester64.exe" "$APP_URL"
@@ -49,13 +51,16 @@ Xvfb :0 -screen 0 1024x768x16 &
 export DISPLAY=:0
 sleep 2
 
-# Start VNC and noVNC Proxy
 x11vnc -display :0 -nopw -listen localhost -forever -quiet &
+sleep 2
+
+# Start noVNC Proxy
 ./noVNC/utils/novnc_proxy --vnc localhost:5900 --listen 8080 &
+sleep 2
 
 echo "========================================================="
 echo "✅ SETUP COMPLETE!"
-echo "🌐 BROWSER LINK: http://$(curl -s ifconfig.me):8080/"
+echo "🌐 BROWSER LINK: http://$(curl -s ifconfig.me):8080/vnc.html"
 echo "========================================================="
 
 echo "=================================================="
@@ -64,6 +69,10 @@ echo "=================================================="
 export WINEPREFIX="$(pwd)/.wine"
 export WINEARCH=win64
 export WINEDEBUG=-all
+
+# Now wineboot will be found
 wineboot -u
 sleep 5
+
+# Launch with SDE
 "$SDE_BIN" -hsw -- wine metatester64.exe
