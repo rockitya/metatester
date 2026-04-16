@@ -9,23 +9,39 @@ SDE_URL="https://archive.org/download/sde-external-tar/sde-external-tar.xz"
 APP_URL="https://archive.org/download/metatester64/metatester64.exe"
 
 echo "=================================================="
-echo "☢️ 1. NUCLEAR CLEANUP"
+echo "☢️ 1. BREAKING APT LOCKS"
+echo "=================================================="
+# Stop the background service specifically
+systemctl stop unattended-upgrades 2>/dev/null || true
+
+# Kill any process holding the lock file
+while fuser /var/lib/apt/lists/lock >/dev/null 2>&1 ; do
+    echo "Waiting for other software managers to finish..."
+    fuser -k /var/lib/apt/lists/lock 2>/dev/null || true
+    sleep 2
+done
+
+killall -9 apt apt-get dpkg 2>/dev/null || true
+rm -f /var/lib/apt/lists/lock /var/lib/dpkg/lock* /var/cache/apt/archives/lock
+dpkg --configure -a || true
+
+echo "=================================================="
+echo "☢️ 2. NUCLEAR CLEANUP"
 echo "=================================================="
 killall -9 xvfb x11vnc websockify wine wine64 sde64 2>/dev/null || true
 rm -rf /tmp/.X11-unix/X* /tmp/.X*-lock
 rm -rf .wine
 
 echo "=================================================="
-echo "☢️ 2. INSTALLING FULL WINE64 STACK"
+echo "☢️ 3. INSTALLING FULL WINE64 STACK"
 echo "=================================================="
 apt-get update
-# Using the standard wine64 package + binfmt ensures the environment is complete
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     wget curl tar xz-utils xvfb x11vnc websockify \
     wine64 libwine binfmt-support
 
 echo "=================================================="
-echo "3. SETTING UP ASSETS"
+echo "4. SETTING UP ASSETS"
 echo "=================================================="
 if [ ! -d "noVNC" ]; then
     wget -qO- https://github.com/novnc/noVNC/archive/v1.4.0.tar.gz | tar xz
@@ -37,16 +53,14 @@ fi
 if [ ! -d "sde_folder" ]; then
     mkdir -p sde_folder && tar -xf "sde-external.tar.xz" -C sde_folder --strip-components=1
 fi
-
 [ ! -f "metatester64.exe" ] && wget -q --show-progress -O "metatester64.exe" "$APP_URL"
 
 echo "=================================================="
-echo "4. STARTING DISPLAY SERVICES (DISPLAY :1)"
+echo "5. STARTING DISPLAY SERVICES (DISPLAY :1)"
 echo "=================================================="
 Xvfb :1 -screen 0 1024x768x16 &
 export DISPLAY=:1
 sleep 3
-
 x11vnc -display :1 -nopw -listen localhost -forever -quiet &
 ./noVNC/utils/novnc_proxy --vnc localhost:5900 --listen 8080 &
 sleep 2
@@ -57,17 +71,11 @@ echo "🌐 BROWSER LINK: http://$(curl -s ifconfig.me):8080/vnc.html"
 echo "========================================================="
 
 echo "=================================================="
-echo "5. LAUNCHING APP VIA SDE"
+echo "6. LAUNCHING APP VIA SDE"
 echo "=================================================="
 export WINEPREFIX="$(pwd)/.wine"
 export WINEARCH=win64
 export DISPLAY=:1
-
-# Force Wine to initialize
 wine64 wineboot -u
 sleep 5
-
-# Launch using Virtual Desktop
 nohup ./sde_folder/sde64 -hsw -- wine64 explorer /desktop=MetaTester,1024x768 metatester64.exe > debug.log 2>&1 &
-
-echo "Process started. If the browser shows a black/blue screen, wait 60s for the app to load."
