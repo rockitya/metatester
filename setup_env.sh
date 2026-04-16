@@ -17,9 +17,9 @@ echo "=================================================="
 echo "2. Installing Core Dependencies"
 echo "=================================================="
 apt-get update
-# Added 'wine' specifically to ensure binaries are in PATH
+# Use wine64 and binfmt-support to ensure Windows apps are recognized
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    wget curl tar xz-utils xvfb x11vnc wine wine64 libwine websockify
+    wget curl tar xz-utils xvfb x11vnc wine64 libwine websockify binfmt-support
 
 echo "=================================================="
 echo "3. Manual noVNC Setup"
@@ -27,7 +27,7 @@ echo "=================================================="
 if [ ! -d "noVNC" ]; then
     wget -qO- https://github.com/novnc/noVNC/archive/v1.4.0.tar.gz | tar xz
     mv noVNC-1.4.0 noVNC
-    ln -s vnc.html noVNC/index.html
+    ln -sf vnc.html noVNC/index.html
 fi
 
 echo "=================================================="
@@ -49,7 +49,7 @@ rm -f /tmp/.X0-lock
 
 Xvfb :0 -screen 0 1024x768x16 &
 export DISPLAY=:0
-sleep 2
+sleep 3
 
 x11vnc -display :0 -nopw -listen localhost -forever -quiet &
 sleep 2
@@ -69,10 +69,11 @@ echo "=================================================="
 export WINEPREFIX="$(pwd)/.wine"
 export WINEARCH=win64
 export WINEDEBUG=-all
+export DISPLAY=:0
 
-# Now wineboot will be found
-wineboot -u
+# Pre-initialize Wine
+wine64 wineboot -u
 sleep 5
 
 # Launch with SDE
-"$SDE_BIN" -hsw -- wine metatester64.exe
+"$SDE_BIN" -hsw -- wine64 metatester64.exe
