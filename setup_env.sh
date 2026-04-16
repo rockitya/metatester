@@ -2,37 +2,74 @@
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 export DISPLAY=:99
 
-echo "--- 1. CLEANING LOCKS ---"
-killall -9 xvfb x11vnc websockify wine wine64 sde64 2>/dev/null || true
-rm -rf /tmp/.X* /tmp/.lock*
+echo "=================================================="
+echo "⚡ 1. CLEANING LOCKS & PREVIOUS SERVICES"
+echo "=================================================="
+systemctl stop unattended-upgrades 2>/dev/null || true
+killall -9 xvfb x11vnc websockify wine wine64 sde64 apt apt-get dpkg 2>/dev/null || true
+rm -rf /tmp/.X* /tmp/.lock* /var/lib/apt/lists/lock /var/lib/dpkg/lock*
 
-echo "--- 2. INSTALLING X11 BASICS (FAST) ---"
+echo "=================================================="
+echo "⚡ 2. INSTALLING LIGHTWEIGHT DISPLAY TOOLS"
+echo "=================================================="
 apt-get update -y -q
 DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends \
     xvfb x11vnc websockify curl tar xz-utils
 
-echo "--- 3. DOWNLOADING PORTABLE WINE (KRON4EK BUILD) ---"
+echo "=================================================="
+echo "⚡ 3. DOWNLOADING WINE 11.6 (ARCHIVE.ORG)"
+echo "=================================================="
 if [ ! -d "wine-dist" ]; then
-    # Using the 9.0 WOW64 build which is very stable for 64-bit apps
-    curl -L "https://github.com/Kron4ek/Wine-Builds/releases/download/9.0/wine-9.0-amd64-wow64.tar.xz" | tar xJ
-    mv wine-9.0-amd64-wow64 wine-dist
+    echo "Downloading and extracting Wine 11.6..."
+    mkdir -p wine-dist
+    # Using the direct download route for clean tar.xz streaming
+    curl -L "https://archive.org/download/wine-11.6-amd64-wow64.tar/wine-11.6-amd64-wow64.tar.xz" | tar xJ -C wine-dist --strip-components=1
 fi
 WINE_BIN="$(pwd)/wine-dist/bin/wine"
 
-echo "--- 4. ASSETS (SDE & APP) ---"
-[ ! -d "noVNC" ] && curl -L https://github.com/novnc/noVNC/archive/v1.4.0.tar.gz | tar xz && mv noVNC-1.4.0 noVNC
-[ ! -d "sde_folder" ] && mkdir -p sde_folder && curl -L "https://archive.org/download/sde-external-tar/sde-external-tar.xz" | tar xJ -C sde_folder --strip-components=1
-[ ! -f "metatester64.exe" ] && curl -L -o "metatester64.exe" "https://archive.org/download/metatester64/metatester64.exe"
+echo "=================================================="
+echo "⚡ 4. DOWNLOADING SDE & APP"
+echo "=================================================="
+if [ ! -d "sde_folder" ]; then
+    echo "Downloading Intel SDE..."
+    mkdir -p sde_folder
+    curl -L "https://archive.org/download/sde-external-tar/sde-external-tar.xz" | tar xJ -C sde_folder --strip-components=1
+fi
 
-echo "--- 5. STARTING SERVICES ---"
+if [ ! -f "metatester64.exe" ]; then
+    echo "Downloading MetaTester..."
+    curl -L -o "metatester64.exe" "https://archive.org/download/metatester64/metatester64.exe"
+fi
+
+echo "=================================================="
+echo "⚡ 5. SETTING UP NOVNC"
+echo "=================================================="
+if [ ! -d "noVNC" ]; then
+    curl -L -s https://github.com/novnc/noVNC/archive/v1.4.0.tar.gz | tar xz
+    mv noVNC-1.4.0 noVNC
+fi
+
+echo "=================================================="
+echo "⚡ 6. STARTING VIRTUAL DISPLAY SERVICES"
+echo "=================================================="
 Xvfb :99 -screen 0 1024x768x16 &
 sleep 2
 x11vnc -display :99 -nopw -listen localhost -forever -quiet &
 ./noVNC/utils/novnc_proxy --vnc localhost:5900 --listen 8080 &
 
-echo "--- 6. LAUNCHING ---"
+echo "=================================================="
+echo "⚡ 7. LAUNCHING METATESTER VIA SDE"
+echo "=================================================="
 export WINEPREFIX="$(pwd)/.wine"
-# Start the virtual desktop and app
+
+# Pre-boot Wine environment
+$WINE_BIN wineboot -u
+sleep 5
+
+# Launch app wrapped in SDE
 nohup ./sde_folder/sde64 -hsw -- $WINE_BIN explorer /desktop=Meta,1024x768 metatester64.exe > debug.log 2>&1 &
 
-echo "✅ Running at http://$(curl -s ifconfig.me):8080/vnc.html"
+echo "========================================================="
+echo "✅ SUCCESS! "
+echo "🌐 BROWSER: http://$(curl -s ifconfig.me):8080/vnc.html"
+echo "========================================================="
