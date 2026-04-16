@@ -1,12 +1,14 @@
 #!/bin/bash
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-export DISPLAY=:99
+export DISPLAY=:77
 
 echo "=================================================="
-echo "⚡ 1. CLEANING LOCKS & PREVIOUS SERVICES"
+echo "⚡ 1. CLEANING LOCKS & ZOMBIE PROCESSES"
 echo "=================================================="
 systemctl stop unattended-upgrades 2>/dev/null || true
-killall -9 xvfb x11vnc websockify wine wine64 sde64 apt apt-get dpkg 2>/dev/null || true
+# CRITICAL FIX: Xvfb is case-sensitive!
+pkill -9 Xvfb
+killall -9 Xvfb xvfb x11vnc websockify wine wine64 sde64 apt apt-get dpkg 2>/dev/null || true
 rm -rf /tmp/.X* /tmp/.lock* /var/lib/apt/lists/lock /var/lib/dpkg/lock*
 
 echo "=================================================="
@@ -17,12 +19,11 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends \
     xvfb x11vnc websockify curl tar xz-utils
 
 echo "=================================================="
-echo "⚡ 3. DOWNLOADING WINE 11.6 (ARCHIVE.ORG)"
+echo "⚡ 3. DOWNLOADING WINE 11.6"
 echo "=================================================="
 if [ ! -d "wine-dist" ]; then
     echo "Downloading and extracting Wine 11.6..."
     mkdir -p wine-dist
-    # Using the direct download route for clean tar.xz streaming
     curl -L "https://archive.org/download/wine-11.6-amd64-wow64.tar/wine-11.6-amd64-wow64.tar.xz" | tar xJ -C wine-dist --strip-components=1
 fi
 WINE_BIN="$(pwd)/wine-dist/bin/wine"
@@ -50,11 +51,11 @@ if [ ! -d "noVNC" ]; then
 fi
 
 echo "=================================================="
-echo "⚡ 6. STARTING VIRTUAL DISPLAY SERVICES"
+echo "⚡ 6. STARTING VIRTUAL DISPLAY (:77)"
 echo "=================================================="
-Xvfb :99 -screen 0 1024x768x16 &
-sleep 2
-x11vnc -display :99 -nopw -listen localhost -forever -quiet &
+Xvfb :77 -screen 0 1024x768x16 &
+sleep 3
+x11vnc -display :77 -nopw -listen localhost -forever -quiet &
 ./noVNC/utils/novnc_proxy --vnc localhost:5900 --listen 8080 &
 
 echo "=================================================="
