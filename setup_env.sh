@@ -12,68 +12,68 @@ rm -rf /tmp/.X* /tmp/.lock* /var/lib/apt/lists/lock /var/lib/dpkg/lock*
 rm -rf /root/.wine /root/wine-dist
 
 echo "=================================================="
-echo "⚡ 2. INSTALLING TOOLS (ADDING UNZIP)"
+echo "⚡ 2. INSTALLING DEPENDENCIES (INCLUDING UNZIP)"
 echo "=================================================="
 apt-get update -y -q
 DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends \
     xvfb x11vnc websockify curl tar xz-utils unzip
 
 echo "=================================================="
-echo "⚡ 3. DOWNLOADING PURE 64-BIT WINE"
+echo "⚡ 3. WINE 9.0 PURE 64-BIT (NO 32-BIT TRAPS)"
 echo "=================================================="
 if [ ! -d "wine-dist" ]; then
-    echo "Downloading Wine 9.0 (Pure 64-bit)..."
-    mkdir -p wine-dist
-    # Direct stream download
-    curl -L "https://archive.org/download/wine-9.0-amd64.tar/wine-9.0-amd64.tar.xz" | tar xJ -C wine-dist --strip-components=1
+    echo "Downloading Wine..."
+    curl -L "https://archive.org/download/wine-9.0-amd64.tar/wine-9.0-amd64.tar.xz" | tar xJ -C . 
+    mv wine-9.0-amd64 wine-dist
 fi
 WINE_BIN="$(pwd)/wine-dist/bin/wine64"
 
 echo "=================================================="
-echo "⚡ 4. DOWNLOADING SDE & METATESTER (ZIP)"
+echo "⚡ 4. UNZIPPING METATESTER (10MB ZIP)"
 echo "=================================================="
-# Download Intel SDE
-if [ ! -d "sde_folder" ]; then
-    mkdir -p sde_folder
-    curl -L "https://archive.org/download/sde-external-tar/sde-external-tar.xz" | tar xJ -C sde_folder --strip-components=1
-fi
-
-# Download and Unzip MetaTester
-echo "Fetching 10MB MetaTester Zip..."
+# Download and unzip the Archive.org zip
 curl -L -o metatester.zip "https://archive.org/compress/metatester64"
 unzip -o metatester.zip
-# Ensure the file is named correctly for the launch command
-mv metatester64.exe metatester_final.exe 2>/dev/null || mv *.exe metatester_final.exe
+# Move the exe to root in case it's in a subfolder
+find . -name "metatester64.exe" -exec mv {} . \;
 
 echo "=================================================="
-echo "⚡ 5. SETTING UP NOVNC"
+echo "⚡ 5. PRE-INSTALLING WINE MONO (SILENT)"
+echo "=================================================="
+export WINEPREFIX="/root/.wine"
+# Pre-create the wine prefix
+$WINE_BIN wineboot -u
+sleep 5
+# Download and install Mono so the popup doesn't block the emulator
+curl -L -o wine-mono.msi "https://dl.winehq.org/wine/wine-mono/8.1.0/wine-mono-8.1.0-x86.msi"
+$WINE_BIN msiexec /i wine-mono.msi /qn
+sleep 5
+
+echo "=================================================="
+echo "⚡ 6. STARTING DISPLAY & NOVNC"
 echo "=================================================="
 if [ ! -d "noVNC" ]; then
     curl -L -s https://github.com/novnc/noVNC/archive/v1.4.0.tar.gz | tar xz
     mv noVNC-1.4.0 noVNC
 fi
 
-echo "=================================================="
-echo "⚡ 6. STARTING VIRTUAL DISPLAY (:77)"
-echo "=================================================="
 Xvfb :77 -screen 0 1024x768x16 &
 sleep 3
 x11vnc -display :77 -nopw -listen localhost -forever -quiet &
 ./noVNC/utils/novnc_proxy --vnc localhost:5900 --listen 8080 &
 
 echo "=================================================="
-echo "⚡ 7. LAUNCHING VIA SDE (SKYLAKE FLAG)"
+echo "⚡ 7. LAUNCHING METATESTER VIA SDE (SKYLAKE)"
 echo "=================================================="
-export WINEPREFIX="$(pwd)/.wine"
+if [ ! -d "sde_folder" ]; then
+    mkdir -p sde_folder
+    curl -L "https://archive.org/download/sde-external-tar/sde-external-tar.xz" | tar xJ -C sde_folder --strip-components=1
+fi
 
-# Pre-boot Wine
-$WINE_BIN wineboot -u
-sleep 5
-
-# Launch the REAL 10MB binary using the stable Skylake flag
-nohup ./sde_folder/sde64 -skx -- $WINE_BIN metatester_final.exe > debug.log 2>&1 &
+# Final Launch Command using Skylake (-skx) for best compatibility
+nohup /root/sde_folder/sde64 -skx -- $WINE_BIN explorer /desktop=Meta,1024x768 metatester64.exe > debug.log 2>&1 &
 
 echo "========================================================="
-echo "✅ SUCCESS! "
+echo "✅ ALL-IN-ONE SETUP COMPLETE!"
 echo "🌐 BROWSER: http://$(curl -s ifconfig.me):8080/vnc_lite.html"
 echo "========================================================="
