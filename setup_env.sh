@@ -6,10 +6,10 @@ echo "=================================================="
 echo "⚡ 1. CLEANING LOCKS & ZOMBIE PROCESSES"
 echo "=================================================="
 systemctl stop unattended-upgrades 2>/dev/null || true
-# CRITICAL FIX: Xvfb is case-sensitive!
 pkill -9 Xvfb
 killall -9 Xvfb xvfb x11vnc websockify wine wine64 sde64 apt apt-get dpkg 2>/dev/null || true
 rm -rf /tmp/.X* /tmp/.lock* /var/lib/apt/lists/lock /var/lib/dpkg/lock*
+rm -rf /root/.wine /root/wine-dist
 
 echo "=================================================="
 echo "⚡ 2. INSTALLING LIGHTWEIGHT DISPLAY TOOLS"
@@ -19,14 +19,15 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends \
     xvfb x11vnc websockify curl tar xz-utils
 
 echo "=================================================="
-echo "⚡ 3. DOWNLOADING WINE 11.6"
+echo "⚡ 3. DOWNLOADING PURE 64-BIT WINE"
 echo "=================================================="
 if [ ! -d "wine-dist" ]; then
-    echo "Downloading and extracting Wine 11.6..."
+    echo "Downloading and extracting Wine 9.0 (Pure 64-bit)..."
     mkdir -p wine-dist
-    curl -L "https://archive.org/download/wine-11.6-amd64-wow64.tar/wine-11.6-amd64-wow64.tar.xz" | tar xJ -C wine-dist --strip-components=1
+    curl -L "https://archive.org/download/wine-9.0-amd64.tar/wine-9.0-amd64.tar.xz" | tar xJ -C wine-dist --strip-components=1
 fi
-WINE_BIN="$(pwd)/wine-dist/bin/wine"
+# Targeting wine64 specifically to avoid 32-bit traps
+WINE_BIN="$(pwd)/wine-dist/bin/wine64"
 
 echo "=================================================="
 echo "⚡ 4. DOWNLOADING SDE & APP"
@@ -59,7 +60,7 @@ x11vnc -display :77 -nopw -listen localhost -forever -quiet &
 ./noVNC/utils/novnc_proxy --vnc localhost:5900 --listen 8080 &
 
 echo "=================================================="
-echo "⚡ 7. LAUNCHING METATESTER VIA SDE"
+echo "⚡ 7. LAUNCHING METATESTER VIA SDE (ICE LAKE)"
 echo "=================================================="
 export WINEPREFIX="$(pwd)/.wine"
 
@@ -67,10 +68,10 @@ export WINEPREFIX="$(pwd)/.wine"
 $WINE_BIN wineboot -u
 sleep 5
 
-# Launch app wrapped in SDE
-nohup ./sde_folder/sde64 -hsw -- $WINE_BIN explorer /desktop=Meta,1024x768 metatester64.exe > debug.log 2>&1 &
+# Launch app wrapped in SDE with -icl flag
+nohup ./sde_folder/sde64 -icl -- $WINE_BIN explorer /desktop=Meta,1024x768 metatester64.exe > debug.log 2>&1 &
 
 echo "========================================================="
 echo "✅ SUCCESS! "
-echo "🌐 BROWSER: http://$(curl -s ifconfig.me):8080/vnc.html"
+echo "🌐 BROWSER: http://$(curl -s ifconfig.me):8080/vnc_lite.html"
 echo "========================================================="
