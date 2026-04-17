@@ -1,79 +1,45 @@
 #!/bin/bash
-export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# 1. SCORCHED EARTH - CLEANUP
+echo "🧹 Wiping old files and processes..."
+killall -9 qemu-x86_64 wine64 wineserver Xvfb x11vnc websockify 2>/dev/null || true
+rm -rf /root/.wine /root/wine-dist /root/qemu* /root/metatester64.exe /root/*.log
+rm -rf /tmp/.X* /tmp/.wine-* /tmp/.X11-unix/*
+for i in {1..8}; do systemctl disable --now MetaTester-$i 2>/dev/null; rm -f /etc/systemd/system/MetaTester-$i.service; done
+systemctl daemon-reload
+
+# 2. FAST DEPENDENCY INSTALL (SSL & Graphics)
+echo "📦 Installing essential networking and display tools..."
+apt-get update -q
+DEBIAN_FRONTEND=noninteractive apt-get install -y -q xvfb x11vnc python3-websockify libgnutls30:amd64 libgnutls30:i386 wget curl
+
+# 3. DOWNLOAD PRE-COMPILED TOOLS
+cd /root
+echo "📥 Downloading Wine 9.0 and QEMU Static..."
+wget -q https://github.com/Kron4ek/Wine-Builds/releases/download/9.0/wine-9.0-amd64-wow64.tar.xz
+tar -xf wine-9.0-amd64-wow64.tar.xz
+wget -q -O qemu-x86_64 https://github.com/multiarch/qemu-user-static/releases/download/v7.2.0-1/qemu-x86_64-static
+chmod +x qemu-x86_64
+
+# 4. INITIALIZE WINE AS WINDOWS 10 (Required for Cloud Tab)
 export DISPLAY=:77
-
-echo "=================================================="
-echo "⚡ 1. CLEANING LOCKS & ZOMBIE PROCESSES"
-echo "=================================================="
-systemctl stop unattended-upgrades 2>/dev/null || true
-pkill -9 Xvfb
-killall -9 Xvfb xvfb x11vnc websockify wine wine64 sde64 apt apt-get dpkg 2>/dev/null || true
-rm -rf /tmp/.X* /tmp/.lock* /var/lib/apt/lists/lock /var/lib/dpkg/lock*
-rm -rf /root/.wine /root/wine-dist
-
-echo "=================================================="
-echo "⚡ 2. INSTALLING DEPENDENCIES (INCLUDING UNZIP)"
-echo "=================================================="
-apt-get update -y -q
-DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends \
-    xvfb x11vnc websockify curl tar xz-utils unzip
-
-echo "=================================================="
-echo "⚡ 3. WINE 9.0 PURE 64-BIT (NO 32-BIT TRAPS)"
-echo "=================================================="
-if [ ! -d "wine-dist" ]; then
-    echo "Downloading Wine..."
-    curl -L "https://archive.org/download/wine-9.0-amd64.tar/wine-9.0-amd64.tar.xz" | tar xJ -C . 
-    mv wine-9.0-amd64 wine-dist
-fi
-WINE_BIN="$(pwd)/wine-dist/bin/wine64"
-
-echo "=================================================="
-echo "⚡ 4. UNZIPPING METATESTER (10MB ZIP)"
-echo "=================================================="
-# Download and unzip the Archive.org zip
-curl -L -o metatester.zip "https://archive.org/compress/metatester64"
-unzip -o metatester.zip
-# Move the exe to root in case it's in a subfolder
-find . -name "metatester64.exe" -exec mv {} . \;
-
-echo "=================================================="
-echo "⚡ 5. PRE-INSTALLING WINE MONO (SILENT)"
-echo "=================================================="
 export WINEPREFIX="/root/.wine"
-# Pre-create the wine prefix
-$WINE_BIN wineboot -u
-sleep 5
-# Download and install Mono so the popup doesn't block the emulator
-curl -L -o wine-mono.msi "https://dl.winehq.org/wine/wine-mono/8.1.0/wine-mono-8.1.0-x86.msi"
-$WINE_BIN msiexec /i wine-mono.msi /qn
-sleep 5
+WINE_BIN="/root/wine-9.0-amd64-wow64/bin/wine64"
+QEMU_BIN="/root/qemu-x86_64"
 
-echo "=================================================="
-echo "⚡ 6. STARTING DISPLAY & NOVNC"
-echo "=================================================="
-if [ ! -d "noVNC" ]; then
-    curl -L -s https://github.com/novnc/noVNC/archive/v1.4.0.tar.gz | tar xz
-    mv noVNC-1.4.0 noVNC
-fi
-
-Xvfb :77 -screen 0 1024x768x16 &
+echo "⚙️ Setting up Windows 10 environment..."
+Xvfb :77 -screen 0 1280x800x24 &
 sleep 3
+$QEMU_BIN -L / $WINE_BIN winecfg /v win10 > /dev/null 2>&1
+
+# 5. START VNC AND WEBSOCKET
+echo "🖥️ Starting VNC on port 8080..."
 x11vnc -display :77 -nopw -listen localhost -forever -quiet &
-./noVNC/utils/novnc_proxy --vnc localhost:5900 --listen 8080 &
+/usr/bin/python3 /usr/bin/websockify --web /usr/share/novnc 8080 localhost:5900 &
 
-echo "=================================================="
-echo "⚡ 7. LAUNCHING METATESTER VIA SDE (SKYLAKE)"
-echo "=================================================="
-if [ ! -d "sde_folder" ]; then
-    mkdir -p sde_folder
-    curl -L "https://archive.org/download/sde-external-tar/sde-external-tar.xz" | tar xJ -C sde_folder --strip-components=1
-fi
+# 6. DOWNLOAD AND LAUNCH METATESTER
+echo "🚀 Launching MetaTester..."
+wget -q https://download.mql5.com/cdn/web/metaquotes.software.corp/mt5/metatester64.exe
+nohup $QEMU_BIN -L / -cpu Skylake-Client $WINE_BIN /root/metatester64.exe /portable > /root/mt5.log 2>&1 &
 
-# Final Launch Command using Skylake (-skx) for best compatibility
-nohup /root/sde_folder/sde64 -skx -- $WINE_BIN explorer /desktop=Meta,1024x768 metatester64.exe > debug.log 2>&1 &
-
-echo "========================================================="
-echo "✅ ALL-IN-ONE SETUP COMPLETE!"
-echo "🌐 BROWSER: http://$(curl -s ifconfig.me):8080/vnc_lite.html"
-echo "========================================================="
+echo "✅ SETUP COMPLETE!"
+echo "👉 Go to: http://$(curl -s ifconfig.me):8080/vnc_lite.html"
